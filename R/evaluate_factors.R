@@ -1,5 +1,5 @@
 
-factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, adj_p_cutoff = 0.05) {
+factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, adj_p_cutoff = 0.05, min_genes = 3) {
     
     enrich_res <- data.frame()
     
@@ -16,12 +16,14 @@ factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, adj_p_cutof
             
             enrich_res_single <- clusterProfiler::enricher(de, pvalueCutoff = 1, qvalueCutoff = 1, TERM2GENE = t2g)  # , universe = as.character(ica_res$feature_data$entrezgene_id)
             enrich_res_single <- enrich_res_single@result
+            enrich_res_single <- enrich_res_single[enrich_res_single$Count >= min_genes ,]
             
             enrich_res_single$adj_p <- p.adjust(enrich_res_single$pvalue, method = "BH")
 
         } else if (method == "ks") {
             
-            
+            # not implemented yet
+            stopifnot(FALSE)
         }
         
         enrich_res_single <- enrich_res_single[which(enrich_res_single$adj_p < adj_p_cutoff) ,]
