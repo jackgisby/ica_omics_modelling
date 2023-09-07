@@ -9,7 +9,7 @@ run_mstd <- function(X, env_name = "ica", min_components = 10, max_components = 
     
     # source the code 
     reticulate::use_virtualenv(env_name)
-    reticulate::source_python("tools/ica_snf_latent_model/src/mstd.py")
+    reticulate::source_python("code/ica_snf_latent_model/src/mstd.py")
     
     reticulate::py_set_seed(seed)
     n_components <- estimate_components(data.frame(scale(X, scale = FALSE)), min_components = min_components, 
@@ -113,27 +113,29 @@ project_ica <- function(newdata, ica_res) {
     return(ica_res) 
 }
 
-create_ica_list <- function(ica_res, pheno_data, mart = NULL) {
+create_ica_list <- function(ica_res, pheno_data, mart = NULL, get_gene_ids = TRUE) {
     
     ica_res$sample_data <- pheno_data
     
-    ica_res$feature_data <- data.frame(ensembl_id = rownames(ica_res$S))
-    
-    if (is.null(mart)) {
-        mart <- biomaRt::useDataset("hsapiens_gene_ensembl", useMart(dataset = "ensembl"))
+    if (get_gene_ids) {
+        ica_res$feature_data <- data.frame(ensembl_id = rownames(ica_res$S))
+        
+        if (is.null(mart)) {
+            mart <- biomaRt::useDataset("hsapiens_gene_ensembl", useMart(dataset = "ensembl"))
+        }
+        
+        ensembl_to_geneid <- biomaRt::getBM(filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene_id"), values = ica_res$feature_data$ensembl_id, mart = mart)
+        ensembl_to_geneid <- ensembl_to_geneid[which(!duplicated(ensembl_to_geneid$ensembl_gene_id)),]
+        
+        ica_res$feature_data <- dplyr::left_join(ica_res$feature_data, ensembl_to_geneid, by = c("ensembl_id" = "ensembl_gene_id"))
+        rownames(ica_res$feature_data) <- ica_res$feature_data$ensembl_id
+        
+        ica_res$feature_data$gene_id <- ica_res$feature_data[["hgnc_symbol"]]
+        ica_res$feature_data$gene_id[is.na(ica_res$feature_data$gene_id)] <- ica_res$feature_data$ensembl_id[is.na(ica_res$feature_data$gene_id)]
+        
+        stopifnot(!any(is.na(ica_res$feature_data$ensembl_id)))
+        stopifnot(!any(is.na(ica_res$feature_data$gene_id)))
     }
-    
-    ensembl_to_geneid <- biomaRt::getBM(filters = "ensembl_gene_id", attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene_id"), values = ica_res$feature_data$ensembl_id, mart = mart)
-    ensembl_to_geneid <- ensembl_to_geneid[which(!duplicated(ensembl_to_geneid$ensembl_gene_id)),]
-    
-    ica_res$feature_data <- dplyr::left_join(ica_res$feature_data, ensembl_to_geneid, by = c("ensembl_id" = "ensembl_gene_id"))
-    rownames(ica_res$feature_data) <- ica_res$feature_data$ensembl_id
-    
-    ica_res$feature_data$gene_id <- ica_res$feature_data$hgnc_symbol
-    ica_res$feature_data$gene_id[is.na(ica_res$feature_data$gene_id)] <- ica_res$feature_data$ensembl_id[is.na(ica_res$feature_data$gene_id)]
-    
-    stopifnot(!any(is.na(ica_res$feature_data$ensembl_id)))
-    stopifnot(!any(is.na(ica_res$feature_data$gene_id)))
     
     # checks
     stopifnot(all(colnames(ica_res$M) == colnames(ica_res$S)))

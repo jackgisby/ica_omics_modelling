@@ -1,5 +1,5 @@
 
-factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, adj_p_cutoff = 0.05, min_genes = 3) {
+factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, min_z_cutoff_genes = 20, adj_p_cutoff = 0.05, min_genes = 3, species = "human", universe_correction = FALSE) {
     
     enrich_res <- data.frame()
     
@@ -8,13 +8,26 @@ factor_enrichment <- function(ica_res, method = "hyp", z_cutoff = 3, adj_p_cutof
         if (method == "hyp") {
             
             # get entrez IDs for genes aligned with factor
-            de <- ica_res$feature_data$entrezgene_id[ica_res$feature_data$ensembl_id %in% rownames(ica_res$S)[which(abs(ica_res$S[,i]) > z_cutoff)]]
+
+            ensembl_ids <- rownames(ica_res$S)[which(abs(ica_res$S[,i]) > z_cutoff)]
             
-            t2g <- msigdbr::msigdbr(species = "human", category = "C2") 
+            if (length(ensembl_ids) < min_z_cutoff_genes) {
+                
+                ensembl_ids <- rownames(ica_res$S)[order(abs(ica_res$S[,i]), decreasing = TRUE)][1:20]
+            }
+            
+            de <- ica_res$feature_data$entrezgene_id[ica_res$feature_data$ensembl_id %in% ensembl_ids]
+
+            t2g <- msigdbr::msigdbr(species = species, category = "C2") 
             t2g <- t2g[t2g$gs_subcat != "CGP" ,]
             t2g <- as.data.frame(dplyr::distinct(t2g, gs_name, entrez_gene))
             
-            enrich_res_single <- clusterProfiler::enricher(de, pvalueCutoff = 1, qvalueCutoff = 1, TERM2GENE = t2g)  # , universe = as.character(ica_res$feature_data$entrezgene_id)
+            if (universe_correction) {
+                universe <- as.character(ica_res$feature_data$entrezgene_id)
+            } else {
+                universe <- NULL
+            }
+            enrich_res_single <- clusterProfiler::enricher(de, pvalueCutoff = 1, qvalueCutoff = 1, TERM2GENE = t2g, universe = universe)
             enrich_res_single <- enrich_res_single@result
             enrich_res_single <- enrich_res_single[enrich_res_single$Count >= min_genes ,]
             
